@@ -86,7 +86,7 @@ if not os.path.exists('preprocessed_tweets_improved.csv'):
 # If the file with the preprocessed tweets already exists, read it in instead of performing preprocessing again
 #   => Used to save run-time
 else:
-    df = pd.read_csv('preprocessed_tweets_improved.csv', nrows=100)
+    df = pd.read_csv('preprocessed_tweets_improved.csv')
 
 # Sample an equal number of tweets from each class
 if equalSampleSize:
