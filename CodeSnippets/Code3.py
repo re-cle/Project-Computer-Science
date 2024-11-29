@@ -6,10 +6,12 @@ import time
 
 # Define cross-validation setup
 kf = StratifiedKFold(n_splits=5)
+
 for classifier_name, classifier in classifiers.items():
     # Arrays to collect metrics and predictions
     all_y_true = []
     all_y_pred = []
+
     # Lists to store fold metrics
     accuracy_scores = []
     precision_scores = []
@@ -55,7 +57,9 @@ for classifier_name, classifier in classifiers.items():
             tn = conf_mat.sum() - (conf_mat[i, :].sum() + conf_mat[:, i].sum() - conf_mat[i, i])  # True Negatives for class i
             fpr = fp / (fp + tn) if (fp + tn) > 0 else 0  # Handle division by zero
             fpr_per_class.append(fpr)
+            
         fpr_scores.append(np.mean(fpr_per_class))  # Macro FPR for this fold
+
 
 # Compute and display the average metrics across folds
 print(f"Results for {classifier_name}:")
@@ -66,4 +70,3 @@ print(f"False Positive Rate (macro): {np.mean(fpr_scores):.4f}")
 print(f"F1-score (macro): {np.mean(f1_scores):.4f}")
 print(f"Total Training Time: {np.sum(training_times):.4f} seconds")
 print(f"Total Testing Time: {np.sum(testing_times):.4f} seconds")
-print()

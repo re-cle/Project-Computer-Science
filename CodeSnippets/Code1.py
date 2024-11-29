@@ -1,10 +1,12 @@
 # Import required libraries
 import nltk
 import re
+import emoji
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer, WordNetLemmatizer
 from textblob import TextBlob
+
 # Download nltk stopwords and other required packages
 nltk.download('stopwords')
 nltk.download('punkt')
@@ -22,6 +24,12 @@ def clean_text(text, apply_stemming=False, apply_lemmatization=True, fix_spellin
     text = re.sub(r"http\S+|www\S+|https\S+", '', text, flags=re.MULTILINE)
     text = re.sub(r'@\w+', '', text)
     text = re.sub(r'[^a-zA-Z]+', ' ', text)
+
+    # Convert hashtags, emojis, and elongated words
+    hashtags = re.findall(r"#(\w+)", text)
+    text += " " + " ".join([f"hashtag_{tag}" for tag in hashtags])
+    text = emoji.demojize(text)
+    text = re.sub(r'(.)\1{2,}', r'\1\1', text)
 
     # Convert to lowercase
     text = text.lower()
