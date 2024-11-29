@@ -9,3 +9,4 @@ tensorflow==2.16.1
 transformers==4.46.0
 tf-keras==2.15.0
 vaderSentiment==3.3.2
+emoji==1.7.0

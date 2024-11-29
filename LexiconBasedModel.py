@@ -4,6 +4,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer, WordNetLemmatizer
 import re
+import emoji
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from textblob import TextBlob
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
@@ -15,7 +16,7 @@ import time
 equalSampleSize = False
 
 # Perform preprocessing and save the results in a separate .csv file
-if not os.path.exists('preprocessed_tweets.csv'):
+if not os.path.exists('preprocessed_tweets_improved.csv'):
     # Load the dataset (update with your actual CSV file name)
     data = pd.read_csv("Tweets.csv")
 
@@ -36,6 +37,13 @@ if not os.path.exists('preprocessed_tweets.csv'):
         text = re.sub(r'@\w+', '', text)
         # Remove punctuations and numbers
         text = re.sub(r'[^a-zA-Z]+', ' ', text)
+        # Remove hashtags but keep their text
+        hashtags = re.findall(r"#(\w+)", text)
+        text += " " + " ".join([f"hashtag_{tag}" for tag in hashtags])
+        # Replace emojis with descriptions
+        text = emoji.demojize(text)
+        # Normalize elongated words (e.g., "soooo" to "so")
+        text = re.sub(r'(.)\1{2,}', r'\1\1', text)
         # Convert to lowercase
         text = text.lower()
         # Tokenize
@@ -67,12 +75,12 @@ if not os.path.exists('preprocessed_tweets.csv'):
 
 
     # Save the dataframe to a CSV file
-    df.to_csv('preprocessed_tweets.csv', index=False)
+    df.to_csv('preprocessed_tweets_improved.csv', index=False)
 
 # If the file with the preprocessed tweets already exists, read it in instead of performing preprocessing again
 #   => Used to save run-time
 else:
-    df = pd.read_csv('preprocessed_tweets.csv')
+    df = pd.read_csv('preprocessed_tweets_improved.csv')
 
 # Sample an equal number of tweets from each class
 if equalSampleSize:

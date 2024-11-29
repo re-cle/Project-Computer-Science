@@ -8,6 +8,7 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer, WordNetLemmatizer
 import re
+import emoji
 from textblob import TextBlob
 from sklearn.feature_extraction.text import TfidfVectorizer
 # Import classifiers
@@ -17,12 +18,23 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import StratifiedKFold, GridSearchCV
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score, f1_score
 import time
 
-# Set true to force an equal number of elements per sentiment class
+# Set to True to force an equal number of elements per sentiment class
 equalSampleSize = False
+# Set to True to apply hyperparameter tuning to Logistic Regression
+lr_HyperparameterTuning = False
+# Set to True to use the previously identified best parameter combination for Logistic Regression (overwrites lr_HyperparameterTuning)
+useBestLrParams = False
+if useBestLrParams:
+    lr_HyperparameterTuning = False
+# Set to True to use balanced class weights for Logistic Regression
+# Only has effect if useBestLrParams is True
+useBalancedClassWeights = False
+# Only use Logistic Regression as a Classifier
+only_LR = False
 
 # Ensures that the visualization works
 matplotlib.use('TkAgg')
@@ -35,7 +47,7 @@ nltk.download('wordnet')
 nltk.download('omw-1.4')
 
 # Perform preprocessing and save the results in a separate .csv file
-if not os.path.exists('preprocessed_tweets.csv'):
+if not os.path.exists('preprocessed_tweets_improved.csv'):
     # Load the dataset (update with your actual CSV file name)
     data = pd.read_csv("Tweets.csv")
 
@@ -56,6 +68,13 @@ if not os.path.exists('preprocessed_tweets.csv'):
         text = re.sub(r'@\w+', '', text)
         # Remove punctuations and numbers
         text = re.sub(r'[^a-zA-Z]+', ' ', text)
+        # Remove hashtags but keep their text
+        hashtags = re.findall(r"#(\w+)", text)
+        text += " " + " ".join([f"hashtag_{tag}" for tag in hashtags])
+        # Replace emojis with descriptions
+        text = emoji.demojize(text)
+        # Normalize elongated words (e.g., "soooo" to "so")
+        text = re.sub(r'(.)\1{2,}', r'\1\1', text)
         # Convert to lowercase
         text = text.lower()
         # Tokenize
@@ -87,12 +106,12 @@ if not os.path.exists('preprocessed_tweets.csv'):
 
 
     # Save the dataframe to a CSV file
-    df.to_csv('preprocessed_tweets.csv', index=False)
+    df.to_csv('preprocessed_tweets_improved.csv', index=False)
 
 # If the file with the preprocessed tweets already exists, read it in instead of performing preprocessing again
 #   => Used to save run-time
 else:
-    df = pd.read_csv('preprocessed_tweets.csv')
+    df = pd.read_csv('preprocessed_tweets_improved.csv')
 
 # Sample an equal number of tweets from each class
 if equalSampleSize:
@@ -120,12 +139,17 @@ X_vec = vectorizer.fit_transform(X)
 y = y.values
 
 # Define classifiers to compare
-classifiers = {
-    'Naive Bayes': MultinomialNB(),
-    'Support Vector Machine': SVC(kernel='linear'),  # Linear kernel is often best for text classification
-    'Logistic Regression': LogisticRegression(max_iter=1000, multi_class='ovr'),  # Increase iterations for convergence
-    'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42)
-}
+if only_LR:
+    classifiers = {
+        'Logistic Regression': LogisticRegression(max_iter=1000, multi_class='ovr'),
+    }
+else:
+    classifiers = {
+        'Naive Bayes': MultinomialNB(),
+        'Support Vector Machine': SVC(kernel='linear'),  # Linear kernel is often best for text classification
+        'Logistic Regression': LogisticRegression(max_iter=1000, multi_class='ovr'),  # Increase iterations for convergence
+        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42)
+    }
 
 # Specify scoring metrics
 scoring = ['accuracy', 'precision_macro', 'recall_macro', 'f1_macro']
@@ -164,6 +188,39 @@ for classifier_name, classifier in classifiers.items():
     f1_scores = []
     training_times = []
     testing_times = []
+
+
+    # If lr_HyperparameterTuning is True, perform hyperparameter tuning for Logistic Regression
+    if classifier_name == 'Logistic Regression' and lr_HyperparameterTuning:
+        # Logistic Regression Tuning
+        # lr_param_grid = {'C': [0.01, 0.1, 1, 10, 100], 'penalty': ['l2'], 'solver': ['lbfgs']}
+        param_grid = {
+            'C': [0.01, 0.1, 1, 10, 100],  # Regularization strength
+            'penalty': ['l2'],  # Regularization types
+            'solver': ['lbfgs'],  # Solvers to try
+            # 'max_iter': [100, 500, 1000, 10000],  # Iterations
+            'tol': [1e-10, 1e-4, 1e-3, 1e-2]  # Convergence tolerance
+        }
+        # lr_grid_search = GridSearchCV(LogisticRegression(max_iter=1000, multi_class='ovr'), lr_param_grid, cv=5)
+        grid_search = GridSearchCV(
+            # LogisticRegression(random_state=42, multi_class='ovr'),
+            LogisticRegression(random_state=42, multi_class='ovr', max_iter=10000),
+            param_grid,
+            cv=5,  # 5-fold cross-validation
+        )
+        grid_search.fit(X_vec, y)
+        print("Best Logistic Regression Parameters:", grid_search.best_params_)
+        best_lr = grid_search.best_estimator_
+        classifier = best_lr
+        # classifier = LogisticRegression(random_state=42, multi_class='ovr', max_iter=10000, C=10, tol=1e-10)
+
+    # If useBestLrParams is True, use the previously found parameter combination to perform Logistic Regression
+    if classifier_name == 'Logistic Regression' and useBestLrParams:
+        if useBalancedClassWeights:
+            classifier = LogisticRegression(random_state=42, multi_class='ovr', max_iter=10000, C=10, tol=1e-10,
+                                            class_weight='balanced')
+        else:
+            classifier = LogisticRegression(random_state=42, multi_class='ovr', max_iter=10000, C=10, tol=1e-10)
 
     # Perform cross-validation manually
     for train_index, test_index in kf.split(X_vec, y):
@@ -250,6 +307,18 @@ for classifier_name, classifier in classifiers.items():
     plt.ylabel('Actual')
     plt.title(f'{classifier_name} Confusion Matrix (Cross-Validation)')
     plt.show()
+
+    # Save misclassified tweets for further analysis
+    misclassified_tweets = []
+    label_mapping = {1: 'positive', 0: 'neutral', -1: 'negative'}
+    for true, pred, text in zip(all_y_true, all_y_pred, X):
+        if true != pred:
+            misclassified_tweets.append(
+                {'Cleaned_Text': text, 'True_Label': label_mapping[true], 'Predicted_Label': label_mapping[pred]})
+
+    misclassified_df = pd.DataFrame(misclassified_tweets)
+    fileName = 'misclassified_tweets_' + str(classifier_name) + '.csv'
+    misclassified_df.to_csv(fileName, index=False)
 
 
 # Convert the metrics and times summaries to DataFrames

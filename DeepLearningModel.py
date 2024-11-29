@@ -1,4 +1,5 @@
 import re
+import emoji
 import pandas as pd
 import numpy as np
 import tf_keras
@@ -22,7 +23,7 @@ from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, r
 equalSampleSize = False
 
 # Perform preprocessing and save the results in a separate .csv file
-if not os.path.exists('preprocessed_tweets.csv'):
+if not os.path.exists('preprocessed_tweets_improved.csv'):
     # Load the dataset (update with your actual CSV file name)
     data = pd.read_csv("Tweets.csv")
 
@@ -43,6 +44,13 @@ if not os.path.exists('preprocessed_tweets.csv'):
         text = re.sub(r'@\w+', '', text)
         # Remove punctuations and numbers
         text = re.sub(r'[^a-zA-Z]+', ' ', text)
+        # Remove hashtags but keep their text
+        hashtags = re.findall(r"#(\w+)", text)
+        text += " " + " ".join([f"hashtag_{tag}" for tag in hashtags])
+        # Replace emojis with descriptions
+        text = emoji.demojize(text)
+        # Normalize elongated words (e.g., "soooo" to "so")
+        text = re.sub(r'(.)\1{2,}', r'\1\1', text)
         # Convert to lowercase
         text = text.lower()
         # Tokenize
@@ -73,12 +81,12 @@ if not os.path.exists('preprocessed_tweets.csv'):
     df['label'] = df['airline_sentiment'].map({'positive': 1, 'neutral': 0, 'negative': -1})
 
     # Save the dataframe to a CSV file
-    df.to_csv('preprocessed_tweets.csv', index=False)
+    df.to_csv('preprocessed_tweets_improved.csv', index=False)
 
 # If the file with the preprocessed tweets already exists, read it in instead of performing preprocessing again
 #   => Used to save run-time
 else:
-    df = pd.read_csv('preprocessed_tweets.csv', nrows=100)
+    df = pd.read_csv('preprocessed_tweets_improved.csv', nrows=100)
 
 # Sample an equal number of tweets from each class
 if equalSampleSize:
@@ -181,6 +189,26 @@ y_pred = model.predict({'input_ids': X_test_tokenized['input_ids'], 'attention_m
 end_test = time.time()
 testing_time = end_test - start_test
 y_pred_classes = np.argmax(y_pred, axis=1)
+
+
+# Identify misclassified tweets
+misclassified_indices = np.where(y_test != y_pred_classes)[0]
+
+# Create a DataFrame of misclassified tweets
+misclassified_tweets = pd.DataFrame({
+    'Cleaned_Text': df.loc[X_test_text.index[misclassified_indices], 'cleaned_text'].values,
+    'True_Label': y_test[misclassified_indices],
+    'Predicted_Label': y_pred_classes[misclassified_indices]
+})
+
+# Map numerical labels back to sentiment for better readability
+label_mapping = {2: 'positive', 1: 'neutral', 0: 'negative'}
+misclassified_tweets['True_Label'] = misclassified_tweets['True_Label'].map(label_mapping)
+misclassified_tweets['Predicted_Label'] = misclassified_tweets['Predicted_Label'].map(label_mapping)
+
+# Save to CSV
+misclassified_tweets.to_csv('misclassified_tweets_DistilBERT.csv', index=False)
+
 
 # Confusion Matrix
 conf_mat = confusion_matrix(y_test, y_pred_classes)
