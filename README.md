@@ -7,7 +7,7 @@ Contains all code referenced during the report, including the used models.
 ### 1. Move to path where the project shall be cloned and execute:
   
 
-    git clone https://github.com/Logrimm99/Project-Computer-Science.git
+    git clone https://github.com/re-cle/Project-Computer-Science.git
 
 ### 2. Install pip for Python3.12:
 		
